@@ -1,0 +1,177 @@
+
+
+### **1. db.py (Improve Connection Handling)**
+#### **Changes:**
+- Use `with sqlite3.connect(DB_FILE) as conn:` to **automatically close** the database after execution.
+
+```python
+import sqlite3
+
+DB_FILE = "productivity.db"
+
+def connect_db():
+    return sqlite3.connect(DB_FILE)
+
+def create_tables():
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                app_name TEXT,
+                duration INTEGER,
+                last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                app_name TEXT UNIQUE,
+                max_time INTEGER
+            )
+        ''')
+        conn.commit()
+
+def log_app_usage(app_name, duration):
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO usage (app_name, duration) VALUES (?, ?)", (app_name, duration))
+        conn.commit()
+
+def get_restricted_apps():
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT app_name, max_time FROM settings")
+        return {app[0]: app[1] for app in cursor.fetchall()}
+
+# Initialize DB on first run
+create_tables()
+```
+
+---
+
+### **2. tracker.py (Improve Process Tracking)**
+#### **Changes:**
+- Track running **process names**, not just window titles.
+- Integrate **auto-close** check into tracking.
+
+```python
+import time
+import psutil
+import os
+from backend.db import log_app_usage, get_restricted_apps
+from PyQt6.QtCore import pyqtSignal, QObject
+import win32gui
+from backend.autoclose import close_app  # Auto-close function
+
+class TrackerSignals(QObject):
+    update_window_signal = pyqtSignal(str)
+    update_tabs_signal = pyqtSignal(list)
+
+signals = TrackerSignals()
+
+def get_active_window():
+    """Returns the currently active window title."""
+    try:
+        if os.name == 'nt':  # Windows
+            return win32gui.GetWindowText(win32gui.GetForegroundWindow())
+    except Exception as e:
+        print(f"[ERROR] Failed to get active window: {e}")
+    return "Unknown Window"
+
+def get_running_processes():
+    """Returns a list of running process names."""
+    return [p.info['name'].lower() for p in psutil.process_iter(attrs=['name'])]
+
+def start_tracking():
+    """Tracks active applications and closes them if needed."""
+    try:
+        print("[INFO] Application tracking started.")
+        restricted_apps = get_restricted_apps()
+        app_times = {}
+
+        while True:
+            active_window = get_active_window()
+            print(f"[INFO] Active Window: {active_window}")
+
+            running_processes = get_running_processes()
+            signals.update_window_signal.emit(active_window)
+
+            for app, max_time in restricted_apps.items():
+                if app in running_processes:
+                    app_times[app] = app_times.get(app, 0) + 2  # Increment time in seconds
+                    print(f"[INFO] Tracking {app}: {app_times[app]} sec")
+                    
+                    if app_times[app] > max_time:
+                        close_app(app)
+                        app_times[app] = 0  # Reset timer after closing
+
+            time.sleep(2)
+    except Exception as e:
+        print(f"[ERROR] Tracking error: {e}")
+
+if __name__ == "__main__":
+    start_tracking()
+```
+
+---
+
+### **3. autoclose.py (Improve Efficiency & Logging)**
+#### **Changes:**
+- **Efficient app closing** by checking active processes.
+- **Logging to app_log.txt** for debugging.
+
+```python
+import psutil
+import time
+import logging
+from backend.db import get_restricted_apps
+
+logging.basicConfig(filename="logs/app_log.txt", level=logging.INFO, format="%(asctime)s - %(message)s")
+
+def close_app(app_name):
+    """Force closes an application by name."""
+    try:
+        for process in psutil.process_iter(attrs=['pid', 'name']):
+            if process.info['name'].lower() == app_name.lower():
+                psutil.Process(process.info['pid']).terminate()
+                logging.info(f"Closed {app_name} (Exceeded limit)")
+                print(f"[INFO] Closed {app_name} (Exceeded limit)")
+                return
+    except Exception as e:
+        logging.error(f"Failed to close {app_name}: {e}")
+        print(f"[ERROR] Failed to close {app_name}: {e}")
+
+def start_autoclose():
+    """Monitors and closes restricted applications in the background."""
+    try:
+        print("[INFO] Auto-close feature started.")
+        restricted_apps = get_restricted_apps()
+        app_times = {}
+
+        while True:
+            running_processes = [p.info['name'].lower() for p in psutil.process_iter(attrs=['name'])]
+
+            for app, max_time in restricted_apps.items():
+                if app in running_processes:
+                    app_times[app] = app_times.get(app, 0) + 1
+                    print(f"[INFO] Monitoring {app}: {app_times[app]} sec")
+
+                    if app_times[app] > max_time:
+                        close_app(app)
+                        app_times[app] = 0  # Reset timer after closing
+
+            time.sleep(1)
+    except Exception as e:
+        print(f"[ERROR] Auto-close encountered an issue: {e}")
+```
+
+---
+
+### **Key Improvements:**
+✅ **Database Handling**: Used `with` statements for safer DB interactions.  
+✅ **Optimized Process Tracking**: Directly checked running processes.  
+✅ **Integrated Auto-Close in Tracking**: Now, `tracker.py` monitors & applies time limits.  
+✅ **Logging for Debugging**: Errors and closed apps are logged in `logs/app_log.txt`.  
+
+Now, your **auto-close feature is efficient and ensures restricted apps are monitored & terminated properly**. 🚀

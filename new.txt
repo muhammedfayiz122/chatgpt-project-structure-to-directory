@@ -1,0 +1,27 @@
+📂 ProductivityTracker/
+│
+├── 📂 backend/                 # Core logic & database handling
+│   ├── db.py                   # SQLite database management
+│   ├── tracker.py              # Process tracking logic (logs app usage)
+│   ├── autoclose.py            # Auto-close logic for restricted apps
+│   ├── config.py               # Configurations (time limits, app list)
+│   ├── utils.py                # Helper functions & logging
+│
+├── 📂 frontend/                # PyQt6 GUI components
+│   ├── main_ui.py              # Main dashboard UI
+│   ├── settings_ui.py          # Settings window UI
+│   ├── style.qss               # Stylesheet for UI
+│
+├── 📂 assets/                  # Icons, images, and resources
+│   ├── icon.png                # App icon
+│
+├── 📂 logs/                    # Log files for debugging
+│   ├── app_log.txt             # Activity log file
+│
+├── 📂 dist/                    # Final packaged `.exe` (after PyInstaller)
+│   ├── ProductivityTracker.exe # Final Windows executable
+│
+├── main.py                     # Entry point of the application
+├── startup.py                   # Auto-startup script for Windows
+├── requirements.txt             # Dependencies list
+├── README.md                    # Project documentation
